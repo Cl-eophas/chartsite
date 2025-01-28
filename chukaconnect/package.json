@@ -1,0 +1,22 @@
+{
+  "name": "chukaconnect",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "server": "node server/index.js",
+    "client": "npm start --prefix client",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@mui/icons-material": "^6.4.0",
+    "@mui/material": "^6.4.0",
+    "concurrently": "^9.1.2",
+    "dotenv": "^16.4.7",
+    "styled-components": "^6.1.14"
+  }
+}
