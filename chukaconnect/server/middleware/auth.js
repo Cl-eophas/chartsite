@@ -5,7 +5,7 @@ export const verifyToken = async (req, res, next) => {
     let token = req.header("Authorization");
 
     if (!token) {
-      return res.status(401).json({ error: "No authentication token provided" });
+      return res.status(403).send("Access Denied");
     }
 
     if (token.startsWith("Bearer ")) {
@@ -14,19 +14,14 @@ export const verifyToken = async (req, res, next) => {
 
     try {
       const verified = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = verified;
+      req.user = verified; // Store the full verified object which includes _id
       next();
-    } catch (jwtError) {
-      if (jwtError.name === "TokenExpiredError") {
-        return res.status(401).json({ error: "Token has expired" });
-      } else if (jwtError.name === "JsonWebTokenError") {
-        return res.status(401).json({ error: "Invalid token" });
-      } else {
-        return res.status(401).json({ error: "Token verification failed" });
-      }
+    } catch (tokenError) {
+      console.error("Token verification failed:", tokenError);
+      return res.status(401).json({ message: "Invalid token" });
     }
   } catch (err) {
-    console.error("Auth Middleware Error:", err);
-    res.status(500).json({ error: "Internal server error during authentication" });
+    console.error("Auth middleware error:", err);
+    res.status(500).json({ message: "Internal server error in authentication" });
   }
 };

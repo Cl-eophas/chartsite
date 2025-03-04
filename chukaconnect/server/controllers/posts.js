@@ -1,46 +1,35 @@
 import Post from "../models/Post.js";
 import User from "../models/User.js";
+import mongoose from "mongoose";
 
 /* CREATE */
 export const createPost = async (req, res) => {
   try {
-    const { userId, description } = req.body;
+    const { userId, caption, location } = req.body;
     const user = await User.findById(userId);
-    
     const newPost = new Post({
       userId,
       firstName: user.firstName,
       lastName: user.lastName,
-      location: user.location,
-      description,
+      location,
+      caption,
       userPicturePath: user.picturePath,
+      picturePath: req.files.picture ? req.files.picture[0].filename : "",
+      clipPath: req.files.clip ? req.files.clip[0].filename : "",
+      documentPath: req.files.document ? req.files.document[0].filename : "",
+      audioPath: req.files.audio ? req.files.audio[0].filename : "",
       likes: {},
       comments: [],
+      views: 0,
+      shares: {},
+      reposts: {},
+      shareCount: {
+        facebook: 0,
+        twitter: 0,
+        whatsapp: 0,
+        linkedin: 0,
+      },
     });
-
-    if (req.file) {
-      const fileType = req.body.fileType;
-      const fileName = req.body.fileName;
-      
-      switch (fileType) {
-        case 'image':
-          newPost.picturePath = req.file.filename;
-          break;
-        case 'video':
-          newPost.videoPath = req.file.filename;
-          break;
-        case 'audio':
-          newPost.audioPath = req.file.filename;
-          break;
-        case 'document':
-          newPost.documentPath = req.file.filename;
-          break;
-      }
-      
-      newPost.fileType = fileType;
-      newPost.fileName = fileName;
-    }
-
     await newPost.save();
 
     const posts = await Post.find().sort({ createdAt: -1 });
@@ -53,10 +42,8 @@ export const createPost = async (req, res) => {
 /* READ */
 export const getFeedPosts = async (req, res) => {
   try {
-    const post = await Post.find()
-      .sort({ createdAt: -1 })
-      .populate("userId", "-password");
-    res.status(200).json(post);
+    const posts = await Post.find().sort({ createdAt: -1 });
+    res.status(200).json(posts);
   } catch (err) {
     res.status(404).json({ message: err.message });
   }
@@ -65,23 +52,8 @@ export const getFeedPosts = async (req, res) => {
 export const getUserPosts = async (req, res) => {
   try {
     const { userId } = req.params;
-    const post = await Post.find({ userId })
-      .sort({ createdAt: -1 })
-      .populate("userId", "-password");
-    res.status(200).json(post);
-  } catch (err) {
-    res.status(404).json({ message: err.message });
-  }
-};
-
-export const getPost = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const post = await Post.findById(id).populate("userId", "-password");
-    if (!post) {
-      return res.status(404).json({ message: "Post not found" });
-    }
-    res.status(200).json(post);
+    const posts = await Post.find({ userId }).sort({ createdAt: -1 });
+    res.status(200).json(posts);
   } catch (err) {
     res.status(404).json({ message: err.message });
   }
@@ -92,21 +64,7 @@ export const likePost = async (req, res) => {
   try {
     const { id } = req.params;
     const { userId } = req.body;
-
-    if (!id || !userId) {
-      return res.status(400).json({ error: "Post ID and User ID are required" });
-    }
-
     const post = await Post.findById(id);
-    if (!post) {
-      return res.status(404).json({ error: "Post not found" });
-    }
-
-    // Initialize likes as Map if it's undefined
-    if (!post.likes) {
-      post.likes = new Map();
-    }
-
     const isLiked = post.likes.get(userId);
 
     if (isLiked) {
@@ -123,205 +81,172 @@ export const likePost = async (req, res) => {
 
     res.status(200).json(updatedPost);
   } catch (err) {
-    console.error("Like Post Error:", err);
-    res.status(500).json({ error: "Failed to update post like status" });
+    res.status(404).json({ message: err.message });
   }
 };
 
-/* COMMENTS */
+export const sharePost = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, platform } = req.body;
+    const post = await Post.findById(id);
+
+    // Increment share count for the platform
+    if (platform && post.shareCount.hasOwnProperty(platform)) {
+      post.shareCount[platform] += 1;
+    }
+
+    // Track who shared
+    const isShared = post.shares.get(userId);
+    if (!isShared) {
+      post.shares.set(userId, true);
+    }
+
+    const updatedPost = await Post.findByIdAndUpdate(
+      id,
+      { 
+        shares: post.shares,
+        shareCount: post.shareCount,
+      },
+      { new: true }
+    );
+
+    res.status(200).json(updatedPost);
+  } catch (err) {
+    res.status(404).json({ message: err.message });
+  }
+};
+
+export const repostPost = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.body;
+    const post = await Post.findById(id);
+    const isReposted = post.reposts.get(userId);
+
+    if (isReposted) {
+      post.reposts.delete(userId);
+    } else {
+      post.reposts.set(userId, true);
+    }
+
+    const updatedPost = await Post.findByIdAndUpdate(
+      id,
+      { reposts: post.reposts },
+      { new: true }
+    );
+
+    res.status(200).json(updatedPost);
+  } catch (err) {
+    res.status(404).json({ message: err.message });
+  }
+};
+
 export const addComment = async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId, comment } = req.body;
-
-    if (!id || !userId || !comment) {
-      return res.status(400).json({ error: "Post ID, User ID, and comment text are required" });
-    }
-
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    const post = await Post.findById(id);
-    if (!post) {
-      return res.status(404).json({ error: "Post not found" });
-    }
-
-    // Create new comment
-    const newComment = {
-      userId,
+    const { text } = req.body;
+    const user = await User.findById(req.user.id);
+    
+    const comment = {
+      userId: user._id,
       firstName: user.firstName,
       lastName: user.lastName,
-      userPicturePath: user.picturePath || "",
-      comment,
-      replies: []
+      userPicturePath: user.picturePath,
+      text,
+      likes: new Map(),
+      replies: [],
     };
 
-    // Add comment to post
-    post.comments.unshift(newComment); // Add to beginning of array
-    await post.save();
+    const post = await Post.findById(id);
+    post.comments.push(comment);
+    const updatedPost = await post.save();
 
-    res.status(200).json(post);
+    res.status(200).json(updatedPost);
   } catch (err) {
-    console.error("Add Comment Error:", err);
-    res.status(500).json({ error: "Failed to add comment" });
+    res.status(404).json({ message: err.message });
   }
 };
 
 export const addReply = async (req, res) => {
   try {
     const { id, commentId } = req.params;
-    const { userId, comment } = req.body;
-
-    if (!id || !commentId || !userId || !comment) {
-      return res.status(400).json({ error: "Post ID, Comment ID, User ID, and reply text are required" });
-    }
-
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    const post = await Post.findById(id);
-    if (!post) {
-      return res.status(404).json({ error: "Post not found" });
-    }
-
-    const commentIndex = post.comments.findIndex(
-      comment => comment._id.toString() === commentId
-    );
-
-    if (commentIndex === -1) {
-      return res.status(404).json({ error: "Comment not found" });
-    }
-
-    // Create new reply
-    const newReply = {
-      userId,
+    const { text } = req.body;
+    const user = await User.findById(req.user.id);
+    
+    const reply = {
+      userId: user._id,
       firstName: user.firstName,
       lastName: user.lastName,
-      userPicturePath: user.picturePath || "",
-      comment
+      userPicturePath: user.picturePath,
+      text,
+      likes: new Map(),
     };
 
-    // Add reply to comment
-    post.comments[commentIndex].replies.unshift(newReply);
-    await post.save();
+    const post = await Post.findById(id);
+    const comment = post.comments.id(commentId);
+    comment.replies.push(reply);
+    const updatedPost = await post.save();
 
-    res.status(200).json(post);
+    res.status(200).json(updatedPost);
   } catch (err) {
-    console.error("Add Reply Error:", err);
-    res.status(500).json({ error: "Failed to add reply" });
+    res.status(404).json({ message: err.message });
   }
 };
 
-export const deleteComment = async (req, res) => {
+export const likeComment = async (req, res) => {
   try {
     const { id, commentId } = req.params;
     const { userId } = req.body;
-
-    if (!id || !commentId || !userId) {
-      return res.status(400).json({ error: "Post ID, Comment ID, and User ID are required" });
-    }
-
     const post = await Post.findById(id);
-    if (!post) {
-      return res.status(404).json({ error: "Post not found" });
+    const comment = post.comments.id(commentId);
+    
+    const isLiked = comment.likes.get(userId);
+    if (isLiked) {
+      comment.likes.delete(userId);
+    } else {
+      comment.likes.set(userId, true);
     }
 
-    // Find the comment index
-    const commentIndex = post.comments.findIndex(
-      comment => comment._id.toString() === commentId
-    );
-
-    if (commentIndex === -1) {
-      return res.status(404).json({ error: "Comment not found" });
-    }
-
-    // Check if user is authorized to delete the comment
-    const comment = post.comments[commentIndex];
-    if (comment.userId !== userId && post.userId !== userId) {
-      return res.status(403).json({ error: "Not authorized to delete this comment" });
-    }
-
-    // Remove the comment
-    post.comments.splice(commentIndex, 1);
-    await post.save();
-
-    res.status(200).json(post);
+    const updatedPost = await post.save();
+    res.status(200).json(updatedPost);
   } catch (err) {
-    console.error("Delete Comment Error:", err);
-    res.status(500).json({ error: "Failed to delete comment" });
+    res.status(404).json({ message: err.message });
   }
 };
 
-export const deleteReply = async (req, res) => {
+export const incrementViews = async (req, res) => {
   try {
-    const { id, commentId, replyId } = req.params;
-    const { userId } = req.body;
-
-    if (!id || !commentId || !replyId || !userId) {
-      return res.status(400).json({ error: "Post ID, Comment ID, Reply ID, and User ID are required" });
-    }
-
-    const post = await Post.findById(id);
-    if (!post) {
-      return res.status(404).json({ error: "Post not found" });
-    }
-
-    const commentIndex = post.comments.findIndex(
-      comment => comment._id.toString() === commentId
+    const { id } = req.params;
+    const post = await Post.findByIdAndUpdate(
+      id,
+      { $inc: { views: 1 } },
+      { new: true }
     );
-
-    if (commentIndex === -1) {
-      return res.status(404).json({ error: "Comment not found" });
-    }
-
-    const replyIndex = post.comments[commentIndex].replies.findIndex(
-      reply => reply._id.toString() === replyId
-    );
-
-    if (replyIndex === -1) {
-      return res.status(404).json({ error: "Reply not found" });
-    }
-
-    // Check if user is authorized to delete the reply
-    const reply = post.comments[commentIndex].replies[replyIndex];
-    if (reply.userId !== userId && post.userId !== userId) {
-      return res.status(403).json({ error: "Not authorized to delete this reply" });
-    }
-
-    // Remove the reply
-    post.comments[commentIndex].replies.splice(replyIndex, 1);
-    await post.save();
-
     res.status(200).json(post);
   } catch (err) {
-    console.error("Delete Reply Error:", err);
-    res.status(500).json({ error: "Failed to delete reply" });
+    res.status(404).json({ message: err.message });
   }
 };
 
-/* DELETE */
+/* DELETE POST */
 export const deletePost = async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId } = req.body;
-
     const post = await Post.findById(id);
+    
     if (!post) {
       return res.status(404).json({ message: "Post not found" });
     }
 
-    // Check if the user is authorized to delete the post
-    if (post.userId.toString() !== userId) {
-      return res.status(403).json({ message: "Not authorized to delete this post" });
+    // Check if user is authorized to delete the post
+    if (post.userId.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Unauthorized to delete this post" });
     }
 
     await Post.findByIdAndDelete(id);
     res.status(200).json({ message: "Post deleted successfully" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ error: err.message });
   }
 };

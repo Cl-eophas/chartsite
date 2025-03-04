@@ -6,9 +6,6 @@ import {
   useMediaQuery,
   Typography,
   useTheme,
-  CircularProgress,
-  Alert,
-  Snackbar,
 } from "@mui/material";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import { Formik } from "formik";
@@ -18,18 +15,12 @@ import { useDispatch } from "react-redux";
 import { setLogin } from "state";
 import Dropzone from "react-dropzone";
 import FlexBetween from "components/FlexBetween";
-import { apiRequest } from "utils/api";
 
 const registerSchema = yup.object().shape({
   firstName: yup.string().required("required"),
   lastName: yup.string().required("required"),
   email: yup.string().email("invalid email").required("required"),
-  password: yup
-    .string()
-    .required("required")
-    .min(8, "Password must be at least 8 characters")
-    .matches(/[A-Z]/, "Password must contain at least one uppercase letter")
-    .matches(/[0-9]/, "Password must contain at least one number"),
+  password: yup.string().required("required"),
   location: yup.string().required("required"),
   occupation: yup.string().required("required"),
   picture: yup.string().required("required"),
@@ -40,21 +31,13 @@ const loginSchema = yup.object().shape({
   password: yup.string().required("required"),
 });
 
-const forgotPasswordSchema = yup.object().shape({
-  email: yup.string().email("invalid email").required("required"),
-});
-
-const initialValuesForgotPassword = {
-  email: "",
-};
-
 const initialValuesRegister = {
-  firstName: "",
-  lastName: "",
-  email: "",
-  password: "",
-  location: "",
-  occupation: "",
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+    location: "",
+    occupation: "",
   picture: "",
 };
 
@@ -65,152 +48,72 @@ const initialValuesLogin = {
 
 const Form = () => {
   const [pageType, setPageType] = useState("login");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
   const { palette } = useTheme();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const isNonMobile = useMediaQuery("(min-width:600px)");
   const isLogin = pageType === "login";
   const isRegister = pageType === "register";
-  const isForgotPassword = pageType === "forgotPassword";
+  
+  const register = async (values, onSubmitProps) => {
+    // this allows us to send form info with image
+    const formData = new FormData();
+    for (let value in values) {
+      formData.append(value, values[value]);
+    }
+    formData.append("picturePath", values.picture.name);
 
-  const handleFormSubmit = async (values, onSubmitProps) => {
-    setLoading(true);
-    setError(null);
-    setSuccess(null);
+    const savedUserResponse = await fetch(
+      "http://localhost:3001/auth/register",
+      {
+        method: "POST",
+        body: formData,
+      }
+    );
+    const savedUser = await savedUserResponse.json();
+    onSubmitProps.resetForm();
 
-    try {
-      if (isLogin) await login(values, onSubmitProps);
-      if (isRegister) await register(values, onSubmitProps);
-      if (isForgotPassword) await handleForgotPassword(values, onSubmitProps);
-    } catch (err) {
-      console.error("Form submission error:", err);
-      setError(err.message || "An unexpected error occurred");
-    } finally {
-      setLoading(false);
+    if (savedUser) {
+      setPageType("login");
     }
   };
 
   const login = async (values, onSubmitProps) => {
-    let retries = 3;
-    let lastError = null;
-
-    while (retries > 0) {
-      try {
-        const loggedIn = await apiRequest("/auth/login", {
-          method: "POST",
-          body: JSON.stringify(values)
-        });
-
-        onSubmitProps.resetForm();
-        if (loggedIn) {
-          dispatch(
-            setLogin({
-              user: loggedIn.user,
-              token: loggedIn.token,
-            })
-          );
-          navigate("/home");
-          return; // Success, exit the function
-        }
-      } catch (err) {
-        console.error(`Login attempt ${4 - retries} failed:`, err);
-        lastError = err;
-        retries--;
-        
-        if (retries > 0) {
-          // Wait for 1 second before retrying
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-    }
-
-    // If we get here, all retries failed
-    throw new Error(lastError?.message || "Failed to log in after multiple attempts");
-  };
-
-  const register = async (values, onSubmitProps) => {
-    try {
-      // this allows us to send form info with image
-      const formData = new FormData();
-      for (let value in values) {
-        formData.append(value, values[value]);
-      }
-      formData.append("picturePath", values.picture.name);
-
-      const savedUserResponse = await apiRequest("/auth/register", {
-        method: "POST",
-        body: formData
-      });
-
-      const savedUser = await savedUserResponse.json();
-
-      if (!savedUserResponse.ok) {
-        throw new Error(savedUser.error || "Registration failed");
-      }
-
-      onSubmitProps.resetForm();
-
-      if (savedUser) {
-        setPageType("login");
-        setSuccess("Registration successful! Please log in.");
-      }
-    } catch (err) {
-      console.error("Registration error:", err);
-      throw new Error(err.message || "Failed to register");
-    }
-  };
-
-  const handleForgotPassword = async (values, onSubmitProps) => {
-    try {
-      const response = await apiRequest("/auth/forgot-password", {
-        method: "POST",
-        body: JSON.stringify(values)
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to process request");
-      }
-
-      onSubmitProps.resetForm();
-      setSuccess(
-        "If an account exists with this email, you will receive password reset instructions shortly."
+    const loggedInResponse = await fetch("http://localhost:3001/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(values),
+    });
+    const loggedIn = await loggedInResponse.json();
+    onSubmitProps.resetForm();
+    if (loggedIn) {
+      dispatch(
+        setLogin({
+          user: loggedIn.user,
+          token: loggedIn.token,
+        })
       );
-    } catch (err) {
-      console.error("Forgot Password Error:", err);
-      throw new Error(
-        err.message || "Unable to process request at this time. Please try again later."
-      );
+      navigate("/home");
     }
   };
 
-  const handleCloseSnackbar = () => {
-    setError(null);
-    setSuccess(null);
+  const handleFormSubmit = async (values, onSubmitProps) => {
+    if (isLogin) await login(values, onSubmitProps);
+    if (isRegister) await register(values, onSubmitProps);
   };
 
   return (
-    <>
+    <Box
+      display="flex"
+      gap="4rem"
+      alignItems="center"
+      justifyContent="center"
+      flexWrap="wrap"
+    >
       <Formik
         onSubmit={handleFormSubmit}
-        initialValues={
-          isLogin
-            ? initialValuesLogin
-            : isRegister
-            ? initialValuesRegister
-            : initialValuesForgotPassword
-        }
-        validationSchema={
-          isLogin
-            ? loginSchema
-            : isRegister
-            ? registerSchema
-            : forgotPasswordSchema
-        }
+        initialValues={isLogin ? initialValuesLogin : initialValuesRegister}
+        validationSchema={isLogin ? loginSchema : registerSchema}
       >
         {({
           values,
@@ -222,13 +125,34 @@ const Form = () => {
           setFieldValue,
           resetForm,
         }) => (
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} style={{ width: "100%", maxWidth: "500px" }}>
             <Box
               display="grid"
               gap="30px"
               gridTemplateColumns="repeat(4, minmax(0, 1fr))"
               sx={{
                 "& > div": { gridColumn: isNonMobile ? undefined : "span 4" },
+                "& .MuiTextField-root": {
+                  backgroundColor: "rgba(255, 255, 255, 0.05)",
+                  borderRadius: "10px",
+                  "& .MuiOutlinedInput-root": {
+                    "& fieldset": {
+                      borderColor: "rgba(255, 255, 255, 0.2)",
+                    },
+                    "&:hover fieldset": {
+                      borderColor: "rgba(255, 255, 255, 0.4)",
+                    },
+                    "&.Mui-focused fieldset": {
+                      borderColor: "#87CEEB",
+                    },
+                  },
+                  "& .MuiInputLabel-root": {
+                    color: "rgba(255, 255, 255, 0.7)",
+                  },
+                  "& .MuiOutlinedInput-input": {
+                    color: "#E0FFFF",
+                  },
+                },
               }}
             >
               {isRegister && (
@@ -239,12 +163,9 @@ const Form = () => {
                     onChange={handleChange}
                     value={values.firstName}
                     name="firstName"
-                    error={
-                      Boolean(touched.firstName) && Boolean(errors.firstName)
-                    }
+                    error={Boolean(touched.firstName) && Boolean(errors.firstName)}
                     helperText={touched.firstName && errors.firstName}
                     sx={{ gridColumn: "span 2" }}
-                    autoComplete="given-name"
                   />
                   <TextField
                     label="Last Name"
@@ -255,7 +176,6 @@ const Form = () => {
                     error={Boolean(touched.lastName) && Boolean(errors.lastName)}
                     helperText={touched.lastName && errors.lastName}
                     sx={{ gridColumn: "span 2" }}
-                    autoComplete="family-name"
                   />
                   <TextField
                     label="Location"
@@ -263,9 +183,7 @@ const Form = () => {
                     onChange={handleChange}
                     value={values.location}
                     name="location"
-                    error={
-                      Boolean(touched.location) && Boolean(errors.location)
-                    }
+                    error={Boolean(touched.location) && Boolean(errors.location)}
                     helperText={touched.location && errors.location}
                     sx={{ gridColumn: "span 4" }}
                   />
@@ -275,17 +193,18 @@ const Form = () => {
                     onChange={handleChange}
                     value={values.occupation}
                     name="occupation"
-                    error={
-                      Boolean(touched.occupation) && Boolean(errors.occupation)
-                    }
+                    error={Boolean(touched.occupation) && Boolean(errors.occupation)}
                     helperText={touched.occupation && errors.occupation}
                     sx={{ gridColumn: "span 4" }}
                   />
                   <Box
                     gridColumn="span 4"
-                    border={`1px solid ${palette.neutral.medium}`}
-                    borderRadius="5px"
+                    border="1px solid rgba(255, 255, 255, 0.2)"
+                    borderRadius="10px"
                     p="1rem"
+                    sx={{
+                      backgroundColor: "rgba(255, 255, 255, 0.05)",
+                    }}
                   >
                     <Dropzone
                       acceptedFiles=".jpg,.jpeg,.png"
@@ -297,17 +216,20 @@ const Form = () => {
                       {({ getRootProps, getInputProps }) => (
                         <Box
                           {...getRootProps()}
-                          border={`2px dashed ${palette.primary.main}`}
+                          border="2px dashed rgba(135, 206, 235, 0.5)"
                           p="1rem"
-                          sx={{ "&:hover": { cursor: "pointer" } }}
+                          sx={{
+                            "&:hover": { cursor: "pointer" },
+                            color: "#E0FFFF",
+                          }}
                         >
                           <input {...getInputProps()} />
                           {!values.picture ? (
-                            <p>Add Picture Here</p>
+                            <p>Add Profile Picture</p>
                           ) : (
                             <FlexBetween>
-                              <Typography>{values.picture.name}</Typography>
-                              <EditOutlinedIcon />
+                              <Typography color="#E0FFFF">{values.picture.name}</Typography>
+                              <EditOutlinedIcon sx={{ color: "#87CEEB" }} />
                             </FlexBetween>
                           )}
                         </Box>
@@ -326,22 +248,18 @@ const Form = () => {
                 error={Boolean(touched.email) && Boolean(errors.email)}
                 helperText={touched.email && errors.email}
                 sx={{ gridColumn: "span 4" }}
-                autoComplete="email"
               />
-              {(isLogin || isRegister) && (
-                <TextField
-                  label="Password"
-                  type="password"
-                  onBlur={handleBlur}
-                  onChange={handleChange}
-                  value={values.password}
-                  name="password"
-                  error={Boolean(touched.password) && Boolean(errors.password)}
-                  helperText={touched.password && errors.password}
-                  sx={{ gridColumn: "span 4" }}
-                  autoComplete={isLogin ? "current-password" : "new-password"}
-                />
-              )}
+              <TextField
+                label="Password"
+                type="password"
+                onBlur={handleBlur}
+                onChange={handleChange}
+                value={values.password}
+                name="password"
+                error={Boolean(touched.password) && Boolean(errors.password)}
+                helperText={touched.password && errors.password}
+                sx={{ gridColumn: "span 4" }}
+              />
             </Box>
 
             {/* BUTTONS */}
@@ -349,115 +267,46 @@ const Form = () => {
               <Button
                 fullWidth
                 type="submit"
-                disabled={loading}
                 sx={{
                   m: "2rem 0",
                   p: "1rem",
-                  backgroundColor: palette.primary.main,
-                  color: palette.background.alt,
-                  "&:hover": { color: palette.primary.main },
+                  backgroundColor: "rgba(135, 206, 235, 0.2)",
+                  color: "#E0FFFF",
+                  borderRadius: "10px",
+                  border: "1px solid rgba(135, 206, 235, 0.5)",
+                  transition: "all 0.3s ease",
+                  "&:hover": {
+                    backgroundColor: "rgba(135, 206, 235, 0.4)",
+                    transform: "translateY(-2px)",
+                  },
                 }}
               >
-                {loading ? (
-                  <CircularProgress size={24} color="inherit" />
-                ) : isForgotPassword ? (
-                  "Send Reset Link"
-                ) : isLogin ? (
-                  "LOGIN"
-                ) : (
-                  "REGISTER"
-                )}
+                {isLogin ? "LOGIN" : "REGISTER"}
               </Button>
-              <Box
-                display="flex"
-                flexDirection="column"
-                alignItems="center"
-                gap="1rem"
+              <Typography
+                onClick={() => {
+                  setPageType(isLogin ? "register" : "login");
+                  resetForm();
+                }}
+                sx={{
+                  textDecoration: "underline",
+                  color: "#E0FFFF",
+                  textAlign: "center",
+                  "&:hover": {
+                    cursor: "pointer",
+                    color: "#87CEEB",
+                  },
+                }}
               >
-                {isLogin && (
-                  <Typography
-                    onClick={() => {
-                      setPageType("forgotPassword");
-                      resetForm();
-                    }}
-                    sx={{
-                      textDecoration: "underline",
-                      color: palette.primary.main,
-                      "&:hover": {
-                        cursor: "pointer",
-                        color: palette.primary.light,
-                      },
-                    }}
-                  >
-                    Forgot Password?
-                  </Typography>
-                )}
-                <Typography
-                  onClick={() => {
-                    setPageType(isLogin ? "register" : "login");
-                    resetForm();
-                  }}
-                  sx={{
-                    textDecoration: "underline",
-                    color: palette.primary.main,
-                    "&:hover": {
-                      cursor: "pointer",
-                      color: palette.primary.light,
-                    },
-                  }}
-                >
-                  {isLogin
-                    ? "Don't have an account? Sign Up here."
-                    : "Already have an account? Login here."}
-                </Typography>
-                {isForgotPassword && (
-                  <Typography
-                    onClick={() => {
-                      setPageType("login");
-                      resetForm();
-                    }}
-                    sx={{
-                      textDecoration: "underline",
-                      color: palette.primary.main,
-                      "&:hover": {
-                        cursor: "pointer",
-                        color: palette.primary.light,
-                      },
-                    }}
-                  >
-                    Back to Login
-                  </Typography>
-                )}
-              </Box>
+                {isLogin
+                  ? "Don't have an account? Sign Up here."
+                  : "Already have an account? Login here."}
+              </Typography>
             </Box>
           </form>
         )}
       </Formik>
-
-      {/* Error Snackbar */}
-      <Snackbar
-        open={!!error}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert onClose={handleCloseSnackbar} severity="error">
-          {error}
-        </Alert>
-      </Snackbar>
-
-      {/* Success Snackbar */}
-      <Snackbar
-        open={!!success}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert onClose={handleCloseSnackbar} severity="success">
-          {success}
-        </Alert>
-      </Snackbar>
-    </>
+    </Box>
   );
 };
 

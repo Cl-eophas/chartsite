@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import {
   Box,
   IconButton,
@@ -10,24 +10,34 @@ import {
   useTheme,
   useMediaQuery,
   Badge,
+  Popover,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemAvatar,
+  Avatar,
 } from "@mui/material";
 import {
+  Search,
+  Message,
   DarkMode,
   LightMode,
+  Notifications,
+  Help,
   Menu,
   Close,
-  Help,
-  Notifications,
-  Chat,
 } from "@mui/icons-material";
 import { useDispatch, useSelector } from "react-redux";
+import { setMode, setLogout } from "state";
 import { useNavigate } from "react-router-dom";
 import FlexBetween from "components/FlexBetween";
-import { setMode, setLogout } from "state";
 
 const Navbar = () => {
   const [isMobileMenuToggled, setIsMobileMenuToggled] = useState(false);
-  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [anchorEl, setAnchorEl] = useState(null);
+
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const user = useSelector((state) => state.user);
@@ -43,35 +53,44 @@ const Navbar = () => {
 
   const fullName = `${user.firstName} ${user.lastName}`;
 
-  const getUnreadMessageCount = useCallback(async () => {
-    try {
-      const response = await fetch(
-        `http://localhost:3001/messages/unread/count/${user._id}`,
-        {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      const data = await response.json();
-      if (data.success) {
-        const totalUnread = Object.values(data.unreadCounts).reduce(
-          (sum, count) => sum + count,
-          0
-        );
-        setUnreadMessageCount(totalUnread);
-      }
-    } catch (error) {
-      console.error("Error fetching unread count:", error);
-    }
-  }, [user._id, token]);
+  const handleSearch = async (event) => {
+    const query = event.target.value;
+    setSearchQuery(query);
+    setAnchorEl(event.currentTarget);
 
-  useEffect(() => {
-    if (user?._id && token) {
-      getUnreadMessageCount();
-      const interval = setInterval(getUnreadMessageCount, 30000); // Poll every 30 seconds
-      return () => clearInterval(interval);
+    if (query.trim()) {
+      try {
+        const response = await fetch(
+          `http://localhost:3001/users/search?query=${query}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        const data = await response.json();
+        // Ensure searchResults is always an array
+        setSearchResults(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Error searching users:", error);
+        setSearchResults([]);
+      }
+    } else {
+      setSearchResults([]);
     }
-  }, [user?._id, token, getUnreadMessageCount]);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleUserClick = (userId) => {
+    navigate(`/profile/${userId}`);
+    handleClose();
+  };
+
+  const open = Boolean(anchorEl);
 
   return (
     <FlexBetween padding="1rem 6%" backgroundColor={alt}>
@@ -88,7 +107,7 @@ const Navbar = () => {
             },
           }}
         >
-          ChukaConnect
+          CHUKA
         </Typography>
         {isNonMobileScreens && (
           <FlexBetween
@@ -97,10 +116,42 @@ const Navbar = () => {
             gap="3rem"
             padding="0.1rem 1.5rem"
           >
-            <InputBase placeholder="Search..." />
+            <InputBase
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={handleSearch}
+            />
+            <IconButton>
+              <Search />
+            </IconButton>
           </FlexBetween>
         )}
       </FlexBetween>
+
+      <Popover
+        open={open && searchResults && searchResults.length > 0}
+        anchorEl={anchorEl}
+        onClose={handleClose}
+        anchorOrigin={{
+          vertical: "bottom",
+          horizontal: "left",
+        }}
+      >
+        <List sx={{ width: "100%", maxWidth: 360, bgcolor: "background.paper" }}>
+          {Array.isArray(searchResults) && searchResults.map((result) => (
+            <ListItem
+              key={result._id}
+              button
+              onClick={() => handleUserClick(result._id)}
+            >
+              <ListItemAvatar>
+                <Avatar src={`http://localhost:3001/assets/${result.picturePath}`} />
+              </ListItemAvatar>
+              <ListItemText primary={`${result.firstName} ${result.lastName}`} />
+            </ListItem>
+          ))}
+        </List>
+      </Popover>
 
       {/* DESKTOP NAV */}
       {isNonMobileScreens ? (
@@ -113,16 +164,16 @@ const Navbar = () => {
             )}
           </IconButton>
           <IconButton onClick={() => navigate("/messages")}>
-            <Badge badgeContent={unreadMessageCount} color="error">
-              <Chat sx={{ fontSize: "25px" }} />
+            <Badge badgeContent={0} color="primary">
+              <Message sx={{ fontSize: "25px" }} />
             </Badge>
           </IconButton>
           <IconButton>
-            <Notifications sx={{ fontSize: "25px" }} />
+            <Badge badgeContent={0} color="primary">
+              <Notifications sx={{ fontSize: "25px" }} />
+            </Badge>
           </IconButton>
-          <IconButton>
-            <Help sx={{ fontSize: "25px" }} />
-          </IconButton>
+          <Help sx={{ fontSize: "25px" }} />
           <FormControl variant="standard" value={fullName}>
             <Select
               value={fullName}
@@ -196,16 +247,16 @@ const Navbar = () => {
               )}
             </IconButton>
             <IconButton onClick={() => navigate("/messages")}>
-              <Badge badgeContent={unreadMessageCount} color="error">
-                <Chat sx={{ fontSize: "25px" }} />
+              <Badge badgeContent={0} color="primary">
+                <Message sx={{ fontSize: "25px" }} />
               </Badge>
             </IconButton>
             <IconButton>
-              <Notifications sx={{ fontSize: "25px" }} />
+              <Badge badgeContent={0} color="primary">
+                <Notifications sx={{ fontSize: "25px" }} />
+              </Badge>
             </IconButton>
-            <IconButton>
-              <Help sx={{ fontSize: "25px" }} />
-            </IconButton>
+            <Help sx={{ fontSize: "25px" }} />
             <FormControl variant="standard" value={fullName}>
               <Select
                 value={fullName}

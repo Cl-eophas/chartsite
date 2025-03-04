@@ -29,38 +29,25 @@ const UserSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    following: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User"
-    }],
-    followers: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User"
-    }],
+    friends: {
+      type: Array,
+      default: [],
+    },
     location: String,
     occupation: String,
     viewedProfile: Number,
     impressions: Number,
+    twitterUrl: {
+      type: String,
+      default: "",
+    },
+    linkedinUrl: {
+      type: String,
+      default: "",
+    },
   },
   { timestamps: true }
 );
-
-// Virtual field for following count
-UserSchema.virtual('followingCount').get(function() {
-  return this.following ? this.following.length : 0;
-});
-
-// Virtual field for followers count
-UserSchema.virtual('followersCount').get(function() {
-  return this.followers ? this.followers.length : 0;
-});
-
-// Method to check if a user is following another user
-UserSchema.methods.isFollowing = function(userId) {
-  return this.following.some(followingId => 
-    followingId.toString() === userId.toString()
-  );
-};
 
 const User = mongoose.model("User", UserSchema);
 export default User;

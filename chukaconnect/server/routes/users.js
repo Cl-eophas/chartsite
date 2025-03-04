@@ -1,22 +1,22 @@
 import express from "express";
 import {
   getUser,
-  getUserFollowers,
-  getUserFollowing,
-  getFriends,
-  followUser,
+  getUserFriends,
+  addRemoveFriend,
+  searchUsers,
+  updateProfile,
 } from "../controllers/users.js";
 import { verifyToken } from "../middleware/auth.js";
 
 const router = express.Router();
 
 /* READ */
+router.get("/search", verifyToken, searchUsers); // Search route must come before /:id route
 router.get("/:id", verifyToken, getUser);
-router.get("/:id/followers", verifyToken, getUserFollowers);
-router.get("/:id/following", verifyToken, getUserFollowing);
-router.get("/:id/friends", verifyToken, getFriends);
+router.get("/:id/friends", verifyToken, getUserFriends);
 
 /* UPDATE */
-router.patch("/:id/follow/:targetId", verifyToken, followUser);
+router.patch("/:id", verifyToken, updateProfile); // Move this before the /:id/:friendId route
+router.patch("/:id/:friendId", verifyToken, addRemoveFriend);
 
 export default router;

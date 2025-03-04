@@ -2,14 +2,12 @@ import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import HomePage from "scenes/homePage";
 import LoginPage from "scenes/loginPage";
 import ProfilePage from "scenes/profilePage";
-import SearchPage from "scenes/searchPage";
-import MessagingPage from "scenes/messaging/MessagingPage";
-import ResetPasswordPage from "scenes/resetPassword/ResetPasswordPage";
-import PostPage from "scenes/postPage";
+import MessagesPage from "scenes/messagesPage";
 import ChatPage from "scenes/chatPage";
+import Navbar from "scenes/navbar";
 import { useMemo } from "react";
 import { useSelector } from "react-redux";
-import { CssBaseline, ThemeProvider } from "@mui/material";
+import { CssBaseline, ThemeProvider, Box } from "@mui/material";
 import { createTheme } from "@mui/material/styles";
 import { themeSettings } from "./theme";
 
@@ -20,38 +18,31 @@ function App() {
 
   return (
     <div className="app">
-      <BrowserRouter future={{ 
-        v7_startTransition: true,
-        v7_relativeSplatPath: true 
-      }}>
+      <BrowserRouter>
         <ThemeProvider theme={theme}>
           <CssBaseline />
           <Routes>
             <Route path="/" element={<LoginPage />} />
-            <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
             <Route
-              path="/home"
-              element={isAuth ? <HomePage /> : <Navigate to="/" />}
-            />
-            <Route
-              path="/profile/:userId"
-              element={isAuth ? <ProfilePage /> : <Navigate to="/" />}
-            />
-            <Route
-              path="/search"
-              element={isAuth ? <SearchPage /> : <Navigate to="/" />}
-            />
-            <Route
-              path="/messages"
-              element={isAuth ? <MessagingPage /> : <Navigate to="/" />}
-            />
-            <Route
-              path="/posts/:id"
-              element={isAuth ? <PostPage /> : <Navigate to="/" />}
-            />
-            <Route
-              path="/chat"
-              element={isAuth ? <ChatPage /> : <Navigate to="/" />}
+              path="/*"
+              element={
+                isAuth ? (
+                  <>
+                    <Navbar />
+                    <Box sx={{ pt: "4rem" }}>
+                      <Routes>
+                        <Route path="/home" element={<HomePage />} />
+                        <Route path="/profile/:userId" element={<ProfilePage />} />
+                        <Route path="/messages" element={<MessagesPage />} />
+                        <Route path="/messages/:userId" element={<ChatPage />} />
+                        <Route path="*" element={<Navigate to="/home" />} />
+                      </Routes>
+                    </Box>
+                  </>
+                ) : (
+                  <Navigate to="/" />
+                )
+              }
             />
           </Routes>
         </ThemeProvider>

@@ -2,7 +2,11 @@ import {
   EditOutlined,
   DeleteOutlined,
   AttachFileOutlined,
+  GifBoxOutlined,
   ImageOutlined,
+  MicOutlined,
+  MoreHorizOutlined,
+  EmojiEmotionsOutlined,
 } from "@mui/icons-material";
 import {
   Box,
@@ -12,7 +16,8 @@ import {
   useTheme,
   Button,
   IconButton,
-  Tooltip,
+  useMediaQuery,
+  Popover,
 } from "@mui/material";
 import FlexBetween from "components/FlexBetween";
 import Dropzone from "react-dropzone";
@@ -21,27 +26,58 @@ import WidgetWrapper from "components/WidgetWrapper";
 import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { setPosts } from "state";
+import EmojiPicker from 'emoji-picker-react';
 
 const MyPostWidget = ({ picturePath }) => {
   const dispatch = useDispatch();
   const [isImage, setIsImage] = useState(false);
+  const [isClip, setIsClip] = useState(false);
+  const [isDocument, setIsDocument] = useState(false);
+  const [isAudio, setIsAudio] = useState(false);
   const [image, setImage] = useState(null);
-  const [post, setPost] = useState("");
+  const [clip, setClip] = useState(null);
+  const [document, setDocument] = useState(null);
+  const [audio, setAudio] = useState(null);
+  const [caption, setCaption] = useState("");
+  const [anchorEl, setAnchorEl] = useState(null);
   const { palette } = useTheme();
   const { _id } = useSelector((state) => state.user);
   const token = useSelector((state) => state.token);
+  const isNonMobileScreens = useMediaQuery("(min-width: 1000px)");
   const mediumMain = palette.neutral.mediumMain;
   const medium = palette.neutral.medium;
+
+  const handleEmojiClick = (emojiObject) => {
+    setCaption(prevCaption => prevCaption + emojiObject.emoji);
+  };
+
+  const handleEmojiButtonClick = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleEmojiClose = () => {
+    setAnchorEl(null);
+  };
 
   const handlePost = async () => {
     const formData = new FormData();
     formData.append("userId", _id);
-    formData.append("description", post);
-
+    formData.append("caption", caption);
     if (image) {
-      formData.append("file", image);
-      formData.append("fileType", "image");
-      formData.append("fileName", image.name);
+      formData.append("picture", image);
+      formData.append("picturePath", image.name);
+    }
+    if (clip) {
+      formData.append("clip", clip);
+      formData.append("clipPath", clip.name);
+    }
+    if (document) {
+      formData.append("document", document);
+      formData.append("documentPath", document.name);
+    }
+    if (audio) {
+      formData.append("audio", audio);
+      formData.append("audioPath", audio.name);
     }
 
     const response = await fetch(`http://localhost:3001/posts`, {
@@ -52,20 +88,21 @@ const MyPostWidget = ({ picturePath }) => {
     const posts = await response.json();
     dispatch(setPosts({ posts }));
     setImage(null);
-    setPost("");
-    setIsImage(false);
+    setClip(null);
+    setDocument(null);
+    setAudio(null);
+    setCaption("");
   };
 
   return (
     <WidgetWrapper>
       <FlexBetween gap="1.5rem">
         <UserImage image={picturePath} />
-        <Box sx={{ position: 'relative', width: '100%' }}>
+        <Box width="100%" display="flex" alignItems="center">
           <InputBase
-            id="post-input"
             placeholder="What's on your mind..."
-            onChange={(e) => setPost(e.target.value)}
-            value={post}
+            onChange={(e) => setCaption(e.target.value)}
+            value={caption}
             sx={{
               width: "100%",
               backgroundColor: palette.neutral.light,
@@ -73,10 +110,27 @@ const MyPostWidget = ({ picturePath }) => {
               padding: "1rem 2rem",
             }}
           />
+          <IconButton onClick={handleEmojiButtonClick}>
+            <EmojiEmotionsOutlined sx={{ color: mediumMain }} />
+          </IconButton>
+          <Popover
+            open={Boolean(anchorEl)}
+            anchorEl={anchorEl}
+            onClose={handleEmojiClose}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: 'right',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'right',
+            }}
+          >
+            <EmojiPicker onEmojiClick={handleEmojiClick} />
+          </Popover>
         </Box>
       </FlexBetween>
-
-      {isImage && (
+      {(isImage || isClip || isDocument || isAudio) && (
         <Box
           border={`1px solid ${medium}`}
           borderRadius="5px"
@@ -84,9 +138,26 @@ const MyPostWidget = ({ picturePath }) => {
           p="1rem"
         >
           <Dropzone
-            acceptedFiles={{ 'image/*': [] }}
+            acceptedFiles={
+              isImage
+                ? { "image/*": [".jpg", ".jpeg", ".png"] }
+                : isClip
+                ? { "video/*": [".mp4", ".avi", ".mov"] }
+                : isDocument
+                ? {
+                    "application/pdf": [".pdf"],
+                    "application/msword": [".doc", ".docx"],
+                    "text/plain": [".txt"],
+                  }
+                : { "audio/*": [".mp3", ".wav"] }
+            }
             multiple={false}
-            onDrop={(acceptedFiles) => setImage(acceptedFiles[0])}
+            onDrop={(acceptedFiles) => {
+              if (isImage) setImage(acceptedFiles[0]);
+              if (isClip) setClip(acceptedFiles[0]);
+              if (isDocument) setDocument(acceptedFiles[0]);
+              if (isAudio) setAudio(acceptedFiles[0]);
+            }}
           >
             {({ getRootProps, getInputProps }) => (
               <FlexBetween>
@@ -98,20 +169,31 @@ const MyPostWidget = ({ picturePath }) => {
                   sx={{ "&:hover": { cursor: "pointer" } }}
                 >
                   <input {...getInputProps()} />
-                  {!image ? (
-                    <Typography>Add Image Here</Typography>
+                  {!image && !clip && !document && !audio ? (
+                    <p>Add {isImage ? "Image" : isClip ? "Clip" : isDocument ? "Document" : "Audio"} Here</p>
                   ) : (
                     <FlexBetween>
                       <Typography>
-                        {image.name}
+                        {isImage
+                          ? image.name
+                          : isClip
+                          ? clip.name
+                          : isDocument
+                          ? document.name
+                          : audio.name}
                       </Typography>
                       <EditOutlined />
                     </FlexBetween>
                   )}
                 </Box>
-                {image && (
+                {(image || clip || document || audio) && (
                   <IconButton
-                    onClick={() => setImage(null)}
+                    onClick={() => {
+                      setImage(null);
+                      setClip(null);
+                      setDocument(null);
+                      setAudio(null);
+                    }}
                     sx={{ width: "15%" }}
                   >
                     <DeleteOutlined />
@@ -126,28 +208,65 @@ const MyPostWidget = ({ picturePath }) => {
       <Divider sx={{ margin: "1.25rem 0" }} />
 
       <FlexBetween>
-        <FlexBetween gap="0.25rem">
-          <Tooltip title="Image">
-            <IconButton onClick={() => setIsImage(!isImage)}>
-              <ImageOutlined sx={{ color: isImage ? palette.primary.main : mediumMain }} />
-            </IconButton>
-          </Tooltip>
+        <FlexBetween gap="0.25rem" onClick={() => setIsImage(!isImage)}>
+          <ImageOutlined sx={{ color: mediumMain }} />
+          <Typography
+            color={mediumMain}
+            sx={{ "&:hover": { cursor: "pointer", color: medium } }}
+          >
+            Image
+          </Typography>
         </FlexBetween>
 
+        <FlexBetween gap="0.25rem" onClick={() => setIsClip(!isClip)}>
+          <GifBoxOutlined sx={{ color: mediumMain }} />
+          <Typography
+            color={mediumMain}
+            sx={{ "&:hover": { cursor: "pointer", color: medium } }}
+          >
+            Clip
+          </Typography>
+        </FlexBetween>
+
+        <FlexBetween gap="0.25rem" onClick={() => setIsDocument(!isDocument)}>
+          <AttachFileOutlined sx={{ color: mediumMain }} />
+          <Typography
+            color={mediumMain}
+            sx={{ "&:hover": { cursor: "pointer", color: medium } }}
+          >
+            Document
+          </Typography>
+        </FlexBetween>
+
+        <FlexBetween gap="0.25rem" onClick={() => setIsAudio(!isAudio)}>
+          <MicOutlined sx={{ color: mediumMain }} />
+          <Typography
+            color={mediumMain}
+            sx={{ "&:hover": { cursor: "pointer", color: medium } }}
+          >
+            Audio
+          </Typography>
+        </FlexBetween>
+
+        {isNonMobileScreens ? (
+          <>
+            <FlexBetween gap="0.25rem">
+              <MoreHorizOutlined sx={{ color: mediumMain }} />
+            </FlexBetween>
+          </>
+        ) : (
+          <FlexBetween gap="0.25rem">
+            <MoreHorizOutlined sx={{ color: mediumMain }} />
+          </FlexBetween>
+        )}
+
         <Button
-          disabled={!post && !image}
+          disabled={!caption && !image && !clip && !document && !audio}
           onClick={handlePost}
           sx={{
             color: palette.background.alt,
             backgroundColor: palette.primary.main,
             borderRadius: "3rem",
-            "&:hover": {
-              backgroundColor: palette.primary.dark,
-            },
-            "&:disabled": {
-              backgroundColor: palette.neutral.light,
-              color: palette.neutral.main,
-            },
           }}
         >
           POST

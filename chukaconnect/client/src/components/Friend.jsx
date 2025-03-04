@@ -1,19 +1,18 @@
-import { PersonAddOutlined, PersonRemoveOutlined } from "@mui/icons-material";
-import { Box, IconButton, Typography, useTheme, Tooltip } from "@mui/material";
+import { PersonAddOutlined, PersonRemoveOutlined, MessageOutlined } from "@mui/icons-material";
+import { Box, IconButton, Typography, useTheme } from "@mui/material";
 import { useDispatch, useSelector } from "react-redux";
-import { useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { setFriends } from "state";
 import FlexBetween from "./FlexBetween";
 import UserImage from "./UserImage";
 
-const Friend = ({ friendId, name, subtitle, userPicturePath, isFollowing: initialIsFollowing = false }) => {
+const Friend = ({ friendId, name, subtitle, userPicturePath, unreadCount, showMessageButton = false }) => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const user = useSelector((state) => state.user);
+  const location = useLocation();
+  const { _id } = useSelector((state) => state.user);
   const token = useSelector((state) => state.token);
-  const [isLoading, setIsLoading] = useState(false);
-  const [localIsFollowing, setLocalIsFollowing] = useState(initialIsFollowing);
-  const [isHovered, setIsHovered] = useState(false);
+  const friends = useSelector((state) => state.user.friends);
 
   const { palette } = useTheme();
   const primaryLight = palette.primary.light;
@@ -21,69 +20,52 @@ const Friend = ({ friendId, name, subtitle, userPicturePath, isFollowing: initia
   const main = palette.neutral.main;
   const medium = palette.neutral.medium;
 
-  // Update local state when prop or user's following list changes
-  useEffect(() => {
-    const isUserFollowing = user.following?.some(f => 
-      (typeof f === 'object' ? f._id === friendId : f === friendId)
-    );
-    setLocalIsFollowing(isUserFollowing);
-  }, [user.following, friendId, initialIsFollowing]);
+  const isFriend = friends.find((friend) => friend._id === friendId);
 
-  if (!user) return null;
-
-  const handleFollow = async () => {
-    if (!token || !user._id || !friendId) {
-      console.error("Missing required data:", { token, userId: user._id, friendId });
-      return;
-    }
-
-    if (isLoading) return;
-
+  const patchFriend = async (e) => {
+    e.stopPropagation();
     try {
-      setIsLoading(true);
-      setLocalIsFollowing(!localIsFollowing);
-
       const response = await fetch(
-        `http://localhost:3001/users/${user._id}/follow/${friendId}`,
+        `http://localhost:3001/users/${_id}/${friendId}`,
         {
           method: "PATCH",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          credentials: 'include'
         }
       );
-
       const data = await response.json();
-
-      if (!response.ok) {
-        setLocalIsFollowing(localIsFollowing);
-        throw new Error(data.message || "Failed to update follow status");
-      }
-
-      dispatch({
-        type: "SET_USER",
-        payload: data.user,
-      });
-
+      dispatch(setFriends({ friends: data }));
     } catch (error) {
-      console.error("Follow error:", error);
-      setLocalIsFollowing(localIsFollowing);
-    } finally {
-      setIsLoading(false);
+      console.error("Error updating friend status:", error);
+    }
+  };
+
+  const handleUserClick = (e) => {
+    e.stopPropagation();
+    navigate(`/profile/${friendId}`);
+  };
+
+  const handleMessageClick = (e) => {
+    e.stopPropagation();
+    // Check if we're already on the messages page
+    const isMessagesPage = location.pathname.startsWith('/messages');
+    
+    // If we're on the messages page, use the new route
+    if (isMessagesPage) {
+      navigate(`/messages/${friendId}`);
+    } else {
+      // If we're not on the messages page, go to messages first
+      navigate('/messages', { state: { redirectTo: friendId } });
     }
   };
 
   return (
     <FlexBetween>
       <FlexBetween gap="1rem">
-        <UserImage image={userPicturePath} size="55px" />
-        <Box
-          onClick={() => {
-            navigate(`/profile/${friendId}`);
-          }}
-        >
+        <UserImage image={userPicturePath} size="55px" onClick={handleUserClick} style={{ cursor: 'pointer' }} />
+        <Box onClick={handleUserClick} sx={{ cursor: "pointer" }}>
           <Typography
             color={main}
             variant="h5"
@@ -91,7 +73,6 @@ const Friend = ({ friendId, name, subtitle, userPicturePath, isFollowing: initia
             sx={{
               "&:hover": {
                 color: palette.primary.light,
-                cursor: "pointer",
               },
             }}
           >
@@ -100,48 +81,52 @@ const Friend = ({ friendId, name, subtitle, userPicturePath, isFollowing: initia
           <Typography color={medium} fontSize="0.75rem">
             {subtitle}
           </Typography>
+          {unreadCount > 0 && (
+            <Typography color="primary" fontSize="0.75rem" fontWeight="bold">
+              {unreadCount} unread {unreadCount === 1 ? 'message' : 'messages'}
+            </Typography>
+          )}
         </Box>
       </FlexBetween>
-      {user._id !== friendId && (
-        <Tooltip title={localIsFollowing ? "Unfollow" : "Follow"}>
+      <Box>
+        <IconButton
+          onClick={patchFriend}
+          sx={{ 
+            backgroundColor: primaryLight, 
+            p: "0.6rem", 
+            mr: "0.5rem",
+            "&:hover": {
+              backgroundColor: palette.primary.main,
+              "& .MuiSvgIcon-root": {
+                color: palette.background.alt,
+              },
+            },
+          }}
+        >
+          {isFriend ? (
+            <PersonRemoveOutlined sx={{ color: primaryDark }} />
+          ) : (
+            <PersonAddOutlined sx={{ color: primaryDark }} />
+          )}
+        </IconButton>
+        {showMessageButton && (
           <IconButton
-            onClick={handleFollow}
-            disabled={isLoading}
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={() => setIsHovered(false)}
-            sx={{
-              backgroundColor: 'transparent',
+            onClick={handleMessageClick}
+            sx={{ 
+              backgroundColor: primaryLight, 
               p: "0.6rem",
-              opacity: isLoading ? 0.7 : 1,
-              transition: "all 0.2s ease",
               "&:hover": {
-                backgroundColor: 'transparent',
-                transform: "scale(1.1)",
+                backgroundColor: palette.primary.main,
+                "& .MuiSvgIcon-root": {
+                  color: palette.background.alt,
+                },
               },
             }}
           >
-            {localIsFollowing ? (
-              <PersonRemoveOutlined 
-                sx={{ 
-                  color: isHovered ? palette.error.main : palette.primary.main,
-                  fontSize: "2rem",
-                  stroke: isHovered ? palette.error.main : palette.primary.main,
-                  strokeWidth: 1
-                }} 
-              />
-            ) : (
-              <PersonAddOutlined 
-                sx={{ 
-                  color: palette.primary.main,
-                  fontSize: "2rem",
-                  stroke: palette.primary.main,
-                  strokeWidth: 1
-                }} 
-              />
-            )}
+            <MessageOutlined sx={{ color: primaryDark }} />
           </IconButton>
-        </Tooltip>
-      )}
+        )}
+      </Box>
     </FlexBetween>
   );
 };

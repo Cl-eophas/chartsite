@@ -1,6 +1,3 @@
 {
-    "files.autoSave": "afterDelay",
-    "files.exclude": {
-        "": true
-    }
+    "codium.codeCompletion.enable": true
 }
